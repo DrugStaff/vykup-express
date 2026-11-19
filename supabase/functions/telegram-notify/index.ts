@@ -64,10 +64,12 @@ function build(r: any, html: boolean) {
 }
 
 async function whatsapp(text: string) {
-  if (!WA_PHONE || !WA_KEY) return;
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(WA_PHONE)}&apikey=${encodeURIComponent(WA_KEY)}&text=${encodeURIComponent(text)}`;
+  const phone = WA_PHONE.replace(/[^\d]/g, "");
+  if (!phone || !WA_KEY) { console.log("whatsapp skipped: phone or apikey missing", { phone: !!phone, key: !!WA_KEY }); return; }
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&apikey=${encodeURIComponent(WA_KEY)}&text=${encodeURIComponent(text)}`;
   const r = await fetch(url);
-  if (!r.ok) console.error("whatsapp", r.status, (await r.text()).slice(0, 300));
+  const body = (await r.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  console.log("whatsapp", r.status, body);
 }
 
 async function tg(method: string, body: Record<string, unknown>) {
@@ -94,12 +96,12 @@ async function signed(path: string): Promise<string | null> {
 Deno.serve(async (req) => {
   const payload = await req.json().catch(() => null);
   const id = payload?.record?.id;
-  if (payload?.type !== "INSERT" || !/^[0-9a-f-]{36}$/i.test(String(id ?? ""))) return new Response("ignored");
+  if (payload?.type !== "INSERT" || !/^[0-9a-f-]{36}$/i.test(String(id ?? ""))) { console.log("ignored payload", payload?.type); return new Response("ignored"); }
   // načíst skutečnou poptávku z databáze (ne z těla požadavku)
   const q = await fetch(`${SB_URL}/rest/v1/requests?id=eq.${id}&select=*`, { headers: { apikey: SB_KEY, authorization: `Bearer ${SB_KEY}` } });
   const rows = q.ok ? await q.json() : [];
   const r = rows[0];
-  if (!r || Date.now() - new Date(r.created_at).getTime() > 10 * 60 * 1000) return new Response("ignored");
+  if (!r || Date.now() - new Date(r.created_at).getTime() > 10 * 60 * 1000) { console.log("ignored", id, q.status, rows.length); return new Response("ignored"); }
 
   await Promise.all([
     whatsapp(build(r, false)).catch((e) => console.error("whatsapp", e)),

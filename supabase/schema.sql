@@ -29,6 +29,7 @@ create index if not exists requests_created_idx on public.requests (created_at d
 grant usage on schema public to anon, authenticated;
 grant insert on public.requests to anon;
 grant select, insert, update, delete on public.requests to authenticated;
+grant select, insert, update, delete on public.requests to service_role;  -- funkce pro upozornění čte poptávku
 
 -- 2. Доступи (RLS): відвідувач сайту може тільки ДОДАТИ заявку, читати й міняти — тільки залогінена команда
 alter table public.requests enable row level security;
