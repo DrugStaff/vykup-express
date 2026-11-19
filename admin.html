@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Výkup Express · Administrace</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0c0b09">
+<link rel="icon" href="assets/brand/favicon-64.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  /* Admin: operated, not read — summary on top, list, detail drawer */
+  :root { --new: #f4e0aa; --contacted: #8fb6d6; --offer: #d6a86e; --bought: #8fc7a0; --rejected: #8a8173; }
+  body { min-height: 100vh; }
+  body::after { display: none; }
+  .abar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: rgba(12,11,9,.92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .abar .wrap { display: flex; align-items: center; gap: 16px; height: 64px; }
+  .abar h1 { font-family: var(--f-mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--mute); font-weight: 500; margin: 0; }
+  .abar .sp { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .mode { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--gold); }
+  .mode.live { color: var(--ok); box-shadow: inset 0 0 0 1px rgba(143,199,160,.4); }
+  .icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: none; box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; display: grid; place-items: center; color: var(--ivory); text-decoration: none; }
+  .icon-btn:hover { box-shadow: inset 0 0 0 1px var(--gold); color: var(--gold-hi); }
+  .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  main { padding-block: 32px 80px; }
+  .hello { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+  .hello h2 { font-family: var(--f-display); font-weight: 500; font-size: clamp(2.2rem, 4vw, 3.2rem); line-height: 1; margin: 0; }
+  .hello p { margin: 6px 0 0; color: var(--mute); font-size: 14px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .kpi { text-align: left; border: 0; cursor: pointer; padding: 18px 18px 16px; border-radius: 18px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); display: grid; gap: 6px; transition: box-shadow .25s, background .25s; }
+  .kpi:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .kpi[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--gold); background: rgba(214,178,110,.06); }
+  .kpi span { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); display: flex; align-items: center; gap: 8px; }
+  .kpi b { font-family: var(--f-body); font-weight: 600; font-size: 2rem; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
+  .kpi.sum b { font-size: 1.7rem; color: var(--gold-hi); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--mute)); flex-shrink: 0; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .tools .fld { flex: 1 1 220px; }
+  .tools .fld select, .tools .fld input[type="text"] { width: 100%; font: inherit; font-size: 15px; color: var(--ivory); background-color: var(--ink-2); border: 0; border-radius: 12px; padding: 12px 14px; box-shadow: inset 0 0 0 1px var(--line-2); outline: none; }
+  .tools .fld select { padding-right: 38px; background-position: right 14px center; }
+  .tools .fld select:focus, .tools .fld input[type="text"]:focus { box-shadow: inset 0 0 0 1px var(--gold); }
+  .tools .fld.cat { flex: 1 1 200px; max-width: 320px; }
+  @media (max-width: 560px) { .tools .fld.cat { max-width: none; } }
+  .count { font-family: var(--f-mono); font-size: 12px; color: var(--dim); margin-left: auto; }
+
+  .list { border-radius: 20px; box-shadow: inset 0 0 0 1px var(--line-2); overflow: hidden; background: var(--ink-2); }
+  .row { display: grid; grid-template-columns: 116px minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 132px 120px; gap: 16px; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line-2); cursor: pointer; transition: background .2s; width: 100%; text-align: left; border-left: 0; border-right: 0; border-top: 0; background: none; font: inherit; color: inherit; }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: rgba(214,178,110,.05); }
+  .row.head { cursor: default; font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); padding-block: 12px; background: var(--ink-3); }
+  .row.head:hover { background: var(--ink-3); }
+  .row .when { font-family: var(--f-mono); font-size: 12.5px; color: var(--mute); font-variant-numeric: tabular-nums; }
+  .row .who b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .who small { color: var(--mute); font-size: 13px; }
+  .row .desc { color: var(--mute); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .price { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+  .row.is-new { box-shadow: inset 3px 0 0 var(--new); }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 35%, transparent); white-space: nowrap; }
+  .pill .dot { background: var(--c); }
+  .pill.new .dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--new) 25%, transparent); } }
+  .catl { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+  .catl svg { width: 22px; height: 22px; fill: none; stroke: var(--gold); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .empty { padding: 56px 20px; text-align: center; color: var(--mute); }
+  .empty b { display: block; font-family: var(--f-display); font-weight: 500; font-size: 1.8rem; color: var(--ivory); margin-bottom: 6px; }
+
+  /* drawer */
+  .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; z-index: 41; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--ink); box-shadow: -1px 0 0 var(--line), -40px 0 80px -20px rgba(0,0,0,.8); transform: translateX(105%); transition: transform .45s var(--ease); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+  .drawer.on { transform: none; }
+  .dh { display: flex; align-items: start; gap: 12px; padding: 22px max(22px, env(safe-area-inset-right, 0px)) 18px 24px; border-bottom: 1px solid var(--line); }
+  .dh h3 { font-family: var(--f-display); font-weight: 500; font-size: 2rem; line-height: 1.05; margin: 0; overflow-wrap: anywhere; }
+  .dh p { margin: 6px 0 0; color: var(--mute); font-size: 13px; font-family: var(--f-mono); }
+  .dh .icon-btn { margin-left: auto; flex-shrink: 0; }
+  .db { overflow-y: auto; padding: 22px max(22px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 28px) 24px; display: grid; gap: 22px; align-content: start; }
+  .facts { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px 14px; margin: 0; font-size: 15px; }
+  .facts dt { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); padding-top: 3px; }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .descbox { padding: 16px 18px; border-radius: 14px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+  .photos button { padding: 0; border: 0; cursor: zoom-in; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nophotos { color: var(--dim); font-size: 14px; margin: 0; }
+  .facts.prop { padding: 16px 18px; border-radius: 14px; background: rgba(214,178,110,.06); box-shadow: inset 0 0 0 1px var(--line); }
+  .sect-l { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); margin: 0 0 10px; }
+  .statuses { display: flex; flex-wrap: wrap; gap: 8px; }
+  .statuses button { border: 0; cursor: pointer; }
+  .statuses button[aria-pressed="false"] { --c: var(--mute) !important; opacity: .75; }
+  .db .fld input, .db .fld textarea { background: var(--ink-2); border-radius: 12px; border: 0; box-shadow: inset 0 0 0 1px var(--line-2); padding: 12px 14px; }
+  .db .fld input:focus, .db .fld textarea:focus { box-shadow: inset 0 0 0 1px var(--gold); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); }
+  .saved { font-size: 13px; color: var(--ok); }
+  .confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: var(--err); }
+  .btn-danger { color: var(--err); box-shadow: inset 0 0 0 1px rgba(229,139,122,.4); background: none; }
+  .btn-danger:hover { background: rgba(229,139,122,.1); }
+
+  .lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.92); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); cursor: zoom-out; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; }
+
+  .login { min-height: calc(100vh - 64px); display: grid; place-items: center; padding-block: 40px; }
+  .login form { width: min(420px, 100%); padding: 36px 32px; border-radius: 24px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); display: grid; gap: 20px; }
+  .login h2 { font-family: var(--f-display); font-weight: 500; font-size: 2.4rem; line-height: 1; margin: 0; }
+  .login p { margin: 0; color: var(--mute); font-size: 14px; }
+  .login .err { color: var(--err); min-height: 1.2em; }
+  .demo-bar { margin-bottom: 20px; padding: 14px 18px; border-radius: 14px; background: rgba(214,178,110,.07); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; color: var(--mute); display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+  .demo-bar b { color: var(--gold-hi); font-weight: 600; }
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); z-index: 70; transform: translate(-50%, calc(100% + 60px)); visibility: hidden; background: var(--gold); color: var(--ink); font-weight: 600; font-size: 14px; padding: 12px 20px; border-radius: 999px; transition: transform .4s var(--ease), visibility 0s .4s; }
+  .toast.on { transform: translate(-50%, 0); visibility: visible; transition: transform .4s var(--ease); }
+
+  @media (max-width: 960px) {
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 16px; }
+    .row.head { display: none; }
+    .row .when { grid-column: 1; grid-row: 1; }
+    .row .st { grid-column: 2; grid-row: 1; justify-self: end; }
+    .row .who { grid-column: 1 / -1; }
+    .row .c2 { grid-column: 1; }
+    .row .price { grid-column: 2; }
+    .row .desc { grid-column: 1 / -1; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  }
+  @media (max-width: 560px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi.sum { grid-column: 1 / -1; }
+    .abar h1 { display: none; }
+    .facts { grid-template-columns: 1fr; gap: 2px; }
+    .facts dd { margin-bottom: 10px; }
+  }
+</style>
+</head>
+<body>
+<header class="abar"><div class="wrap">
+  <a class="logo" href="index.html" aria-label="Výkup Express – web"><img class="lg-emblem" src="assets/brand/emblem-640.webp" alt="" width="52" height="48"><img class="lg-word" src="assets/brand/wordmark.png" alt="Výkup Express" width="302" height="120"></a>
+  <h1>Administrace</h1>
+  <div class="sp">
+    <span class="mode" id="mode">Demo</span>
+    <button class="icon-btn" type="button" id="refresh" aria-label="Obnovit"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg></button>
+    <a class="icon-btn" href="index.html" aria-label="Otevřít web"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg></a>
+    <button class="icon-btn" type="button" id="logout" aria-label="Odhlásit" hidden><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></button>
+  </div>
+</div></header>
+
+<section class="login wrap" id="login" hidden>
+  <form id="login-form" novalidate>
+    <h2>Přihlášení</h2>
+    <p>Jen pro tým Výkup Express.</p>
+    <div class="fld"><label for="l-email">E-mail</label><input type="email" id="l-email" autocomplete="username" required></div>
+    <div class="fld"><label for="l-pass">Heslo</label><input type="password" id="l-pass" autocomplete="current-password" required></div>
+    <p class="err" id="l-err" role="alert"></p>
+    <button class="btn btn-gold" type="submit" id="l-btn"><span>Přihlásit</span></button>
+  </form>
+</section>
+
+<main class="wrap" id="app" hidden>
+  <div class="demo-bar" id="demo-bar" hidden>
+    <span><b>Ukázkový režim.</b> Poptávky se ukládají jen v tomto prohlížeči. Vyzkoušejte formulář na webu a poptávka se tu hned objeví.</span>
+    <a class="btn btn-ghost btn-sm" href="index.html#nabidka">Vyzkoušet formulář</a>
+  </div>
+  <div class="hello">
+    <div><h2>Poptávky</h2><p id="updated">Načítám…</p></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="tools">
+    <div class="fld"><label for="q" class="sr">Hledat</label><input type="text" id="q" placeholder="Hledat jméno, telefon, město, popis…" autocomplete="off"></div>
+    <div class="fld cat"><label for="fcat" class="sr">Kategorie</label><select id="fcat"><option value="">Všechny kategorie</option></select></div>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="list" id="list" role="list"></div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="d-name"></aside>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="assets/config.js"></script>
+<script src="assets/store.js"></script>
+<script>
+(function () {
+  var D = document, $ = function (s, el) { return (el || D).querySelector(s); };
+  var C = window.VE_CONFIG || {};
+  var ST = [
+    { k: "new", l: "Nová", c: "var(--new)" },
+    { k: "contacted", l: "Kontaktováno", c: "var(--contacted)" },
+    { k: "offer", l: "Nabídka", c: "var(--offer)" },
+    { k: "bought", l: "Vykoupeno", c: "var(--bought)" },
+    { k: "rejected", l: "Zamítnuto", c: "var(--rejected)" }
+  ];
+  var CAT = {
+    zlato: { l: "Zlato a stříbro", i: '<path d="M5 37h38l-5.5-11h-27zM12 26l4-8.5h16l4 8.5"/>' },
+    auta: { l: "Auto / motorka", i: '<path d="M4 31v-4.5l6-2 6-7h15l7 7 5 1.2V31h-3M30 31H18M9 31H4"/><circle cx="13.5" cy="31" r="4"/><circle cx="34.5" cy="31" r="4"/>' },
+    elektronika: { l: "Elektronika", i: '<rect x="15" y="5" width="18" height="38" rx="3.5"/><path d="M21.5 38.5h5"/>' },
+    luxus: { l: "Hodinky a luxus", i: '<circle cx="24" cy="24" r="11"/><path d="M18.5 14.5l1.5-9h8l1.5 9M18.5 33.5l1.5 9h8l1.5-9M24 17v7l4.5 3"/>' },
+    ostatni: { l: "Jiné", i: '<path d="M10 19l6.5-9h15l6.5 9-14 19z"/><path d="M10 19h28M17 19l7 19 7-19"/>' },
+    nemovitosti: { l: "Nemovitost", i: '<path d="M5 22L24 7l19 15"/><path d="M10 18v23h28V18"/><path d="M20 41V29h8v12"/>' }
+  };
+  var PD = {
+    type: ["Typ", { byt: "Byt", dum: "Rodinný dům", pozemek: "Pozemek", chata: "Chata / chalupa", komercni: "Komerční prostor", podil: "Podíl" }],
+    address: ["Adresa"], layout: ["Dispozice", { other: "Jiná" }], area_m2: ["Užitná plocha", null, " m²"], land_m2: ["Pozemek", null, " m²"],
+    ownership: ["Vlastnictví", { os: "Osobní", dr: "Družstevní", sp: "Spoluvlastnictví" }],
+    condition: ["Stav", { "new": "Novostavba", good: "Dobrý", reno: "Před rekonstrukcí", demo: "Ke zbourání" }],
+    burdens: ["Zatížení", { mort: "Hypotéka", exe: "Exekuce", ease: "Věcné břemeno", none: "Bez zatížení" }],
+    occupancy: ["Obsazenost", { free: "Volná", owner: "Bydlí vlastník", rent: "Pronajato" }],
+    timeline: ["Kdy prodat", { asap: "Co nejdřív", "3m": "Do 3 měsíců", info: "Zjišťuje cenu" }],
+    price_idea: ["Představa klienta", null, " Kč"], email: ["E-mail"]
+  };
+  function detailsHtml(d) {
+    if (!d || !Object.keys(d).length) return "";
+    var rows = Object.keys(PD).filter(function (k) { var v = d[k]; return v != null && v !== "" && !(Array.isArray(v) && !v.length); }).map(function (k) {
+      var def = PD[k], v = d[k], map = def[1];
+      var shown = Array.isArray(v) ? v.map(function (x) { return (map && map[x]) || x; }).join(", ")
+        : (map && map[v]) || (typeof v === "number" ? v.toLocaleString("cs-CZ") : v);
+      return "<dt>" + def[0] + "</dt><dd>" + esc(shown) + (def[2] || "") + "</dd>";
+    }).join("");
+    return '<div><p class="sect-l">Dotazník k nemovitosti</p><dl class="facts prop">' + rows + "</dl></div>";
+  }
+  var CP = { call: "Zavolat", whatsapp: "WhatsApp", telegram: "Telegram" };
+  var LANG = { cs: "čeština", de: "němčina", ru: "ruština" };
+  var all = [], filt = { status: "", cat: "", q: "" }, openId = null;
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function st(k) { return ST.filter(function (s) { return s.k === k; })[0] || ST[0]; }
+  function pill(k) { var s = st(k); return '<span class="pill ' + s.k + '" style="--c:' + s.c + '"><span class="dot"></span>' + s.l + '</span>'; }
+  function catl(k) { var c = CAT[k] || CAT.ostatni; return '<span class="catl"><svg viewBox="0 0 48 48" aria-hidden="true">' + c.i + '</svg>' + c.l + '</span>'; }
+  function kc(n) { return n == null || n === "" ? "" : Number(n).toLocaleString("cs-CZ") + " Kč"; }
+  function when(iso) {
+    var d = new Date(iso), now = new Date(), diff = (now - d) / 60000;
+    if (diff < 1) return "právě teď";
+    if (diff < 60) return "před " + Math.round(diff) + " min";
+    if (d.toDateString() === now.toDateString()) return "dnes " + d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" }) + " " + d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+  }
+  function toast(msg) { var t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove("on"); }, 2200); }
+
+  Object.keys(CAT).forEach(function (k) { var o = D.createElement("option"); o.value = k; o.textContent = CAT[k].l; $("#fcat").appendChild(o); });
+
+  function renderKpis() {
+    var cnt = {}; ST.forEach(function (s) { cnt[s.k] = 0; });
+    var sum = 0;
+    all.forEach(function (r) { cnt[r.status] = (cnt[r.status] || 0) + 1; if (r.status === "bought" && r.offer_price) sum += Number(r.offer_price); });
+    var h = ["new", "contacted", "offer", "bought"].map(function (k) {
+      var s = st(k);
+      return '<button class="kpi" type="button" data-st="' + k + '" aria-pressed="' + (filt.status === k) + '"><span><i class="dot" style="--c:' + s.c + '"></i>' + s.l + '</span><b>' + cnt[k] + '</b></button>';
+    }).join("");
+    h += '<button class="kpi sum" type="button" data-st="" aria-pressed="' + (filt.status === "") + '"><span>Vše · vykoupeno za</span><b>' + (sum ? kc(sum) : "0 Kč") + '</b></button>';
+    $("#kpis").innerHTML = h;
+    Array.prototype.forEach.call(D.querySelectorAll(".kpi"), function (b) {
+      b.addEventListener("click", function () { filt.status = filt.status === b.dataset.st ? "" : b.dataset.st; render(); });
+    });
+  }
+
+  function render() {
+    renderKpis();
+    var q = filt.q.toLowerCase();
+    var rows = all.filter(function (r) {
+      if (filt.status && r.status !== filt.status) return false;
+      if (filt.cat && r.category !== filt.cat) return false;
+      if (q && [r.name, r.phone, r.city, r.description, r.note].join(" ").toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    $("#count").textContent = rows.length + " z " + all.length;
+    if (!all.length) {
+      $("#list").innerHTML = '<div class="empty"><b>Zatím žádné poptávky</b>Jakmile někdo vyplní formulář na webu, objeví se tady a přijde upozornění do Telegramu.</div>';
+      return;
+    }
+    if (!rows.length) { $("#list").innerHTML = '<div class="empty"><b>Nic nenalezeno</b>Zkuste jiný filtr nebo hledaný výraz.</div>'; return; }
+    $("#list").innerHTML = '<div class="row head" role="presentation"><span>Kdy</span><span>Klient</span><span>Kategorie</span><span>Popis</span><span>Stav</span><span style="text-align:right">Nabídka</span></div>' +
+      rows.map(function (r) {
+        return '<button class="row' + (r.status === "new" ? " is-new" : "") + '" type="button" role="listitem" data-id="' + esc(r.id) + '">' +
+          '<span class="when">' + when(r.created_at) + '</span>' +
+          '<span class="who"><b>' + esc(r.name) + '</b><small>' + esc(r.phone) + (r.city ? " · " + esc(r.city) : "") + '</small></span>' +
+          '<span class="c2">' + catl(r.category) + '</span>' +
+          '<span class="desc">' + esc(r.description || "—") + '</span>' +
+          '<span class="st">' + pill(r.status) + '</span>' +
+          '<span class="price">' + kc(r.offer_price) + '</span></button>';
+      }).join("");
+    Array.prototype.forEach.call(D.querySelectorAll(".row[data-id]"), function (b) { b.addEventListener("click", function () { openDrawer(b.dataset.id); }); });
+  }
+
+  function load(quiet) {
+    return VEStore.list().then(function (l) {
+      all = (l || []).sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; }); render();
+      $("#updated").textContent = "Aktualizováno " + new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+      if (openId && !all.some(function (r) { return r.id === openId; })) closeDrawer();
+    }).catch(function (e) { if (!quiet) toast("Načtení se nepovedlo: " + (e.message || "chyba")); });
+  }
+
+  function openDrawer(id) {
+    var r = all.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    openId = id;
+    var wa = String(r.phone || "").replace(/\D/g, "");
+    var dr = $("#drawer");
+    dr.innerHTML =
+      '<div class="dh"><div><h3 id="d-name">' + esc(r.name) + '</h3><p>' + new Date(r.created_at).toLocaleString("cs-CZ") + '</p></div><button class="icon-btn" type="button" id="d-close" aria-label="Zavřít"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>' +
+      '<div class="db">' +
+        '<div class="quick"><a class="btn btn-gold btn-sm" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">WhatsApp</a><a class="btn btn-ghost btn-sm" href="tel:' + esc(r.phone) + '">Zavolat</a><button class="btn btn-ghost btn-sm" type="button" id="d-copy">Kopírovat číslo</button></div>' +
+        '<dl class="facts"><dt>Telefon</dt><dd id="d-phone">' + esc(r.phone) + '</dd><dt>Kategorie</dt><dd>' + catl(r.category) + '</dd><dt>Město</dt><dd>' + esc(r.city || "—") + '</dd><dt>Ozvat se</dt><dd>' + esc(CP[r.contact_pref] || r.contact_pref || "—") + '</dd><dt>Jazyk</dt><dd>' + esc(LANG[r.lang] || r.lang || "—") + '</dd></dl>' +
+        detailsHtml(r.details) +
+        '<div><p class="sect-l">Popis</p><div class="descbox">' + esc(r.description || "—") + '</div></div>' +
+        '<div><p class="sect-l">Fotky</p><div class="photos" id="d-photos"><p class="nophotos">' + ((r.photos || []).length ? "Načítám…" : "Bez fotek") + '</p></div></div>' +
+        '<div><p class="sect-l">Stav</p><div class="statuses" id="d-st">' + ST.map(function (s) { return '<button type="button" class="pill ' + s.k + '" style="--c:' + s.c + '" data-k="' + s.k + '" aria-pressed="' + (s.k === r.status) + '"><span class="dot"></span>' + s.l + '</button>'; }).join("") + '</div></div>' +
+        '<div class="fld"><label for="d-price">Nabídnutá cena (Kč)</label><input type="number" id="d-price" inputmode="numeric" min="0" step="100" value="' + (r.offer_price == null ? "" : esc(r.offer_price)) + '" placeholder="např. 12000"></div>' +
+        '<div class="fld"><label for="d-note">Poznámka pro tým</label><textarea id="d-note" rows="3" placeholder="Domluva, termín, co jsme slíbili…">' + esc(r.note || "") + '</textarea></div>' +
+        '<div class="actions"><button class="btn btn-gold btn-sm" type="button" id="d-save">Uložit</button><span class="saved" id="d-saved"></span><span id="d-delwrap"><button class="btn btn-danger btn-sm" type="button" id="d-del">Smazat</button></span></div>' +
+      '</div>';
+    var status = r.status;
+    Array.prototype.forEach.call(dr.querySelectorAll("#d-st button"), function (b) {
+      b.addEventListener("click", function () { status = b.dataset.k; Array.prototype.forEach.call(dr.querySelectorAll("#d-st button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); }); });
+    });
+    $("#d-close").addEventListener("click", closeDrawer);
+    $("#d-copy").addEventListener("click", function () {
+      try { navigator.clipboard.writeText(r.phone).then(function () { toast("Číslo zkopírováno"); }, sel); } catch (e) { sel(); }
+      function sel() { var rg = D.createRange(); rg.selectNodeContents($("#d-phone")); var s = getSelection(); s.removeAllRanges(); s.addRange(rg); }
+    });
+    $("#d-save").addEventListener("click", function () {
+      var pv = $("#d-price").value.trim();
+      var patch = { status: status, offer_price: pv === "" ? null : Number(pv), note: $("#d-note").value };
+      VEStore.update(r.id, patch).then(function () { Object.assign(r, patch); render(); $("#d-saved").textContent = "Uloženo"; toast("Uloženo"); setTimeout(function () { var s = $("#d-saved"); if (s) s.textContent = ""; }, 2000); })
+        .catch(function (e) { toast("Uložení se nepovedlo: " + (e.message || "chyba")); });
+    });
+    $("#d-del").addEventListener("click", function () {
+      $("#d-delwrap").innerHTML = '<span class="confirm">Opravdu smazat i s fotkami? <button class="btn btn-danger btn-sm" type="button" id="d-yes">Smazat</button><button class="btn btn-ghost btn-sm" type="button" id="d-no">Ne</button></span>';
+      $("#d-no").addEventListener("click", function () { openDrawer(r.id); });
+      $("#d-yes").addEventListener("click", function () {
+        VEStore.remove(r).then(function () { all = all.filter(function (x) { return x.id !== r.id; }); closeDrawer(); render(); toast("Smazáno"); })
+          .catch(function (e) { toast("Smazání se nepovedlo: " + (e.message || "chyba")); });
+      });
+    });
+    if ((r.photos || []).length) {
+      VEStore.photoUrls(r).then(function (urls) {
+        var box = $("#d-photos"); if (!box) return;
+        box.innerHTML = urls.length ? urls.map(function (u, i) { return '<button type="button" data-u="' + esc(u) + '" aria-label="Fotka ' + (i + 1) + '"><img src="' + esc(u) + '" alt=""></button>'; }).join("") : '<p class="nophotos">Fotky se nepodařilo načíst</p>';
+        Array.prototype.forEach.call(box.querySelectorAll("button"), function (b) { b.addEventListener("click", function () { lightbox(b.dataset.u); }); });
+      });
+    }
+    dr.classList.add("on"); dr.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("on");
+    setTimeout(function () { var c = $("#d-close"); if (c) c.focus(); }, 50);
+  }
+  function closeDrawer() { openId = null; $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("on"); }
+  function lightbox(u) {
+    var lb = D.createElement("div"); lb.className = "lightbox"; lb.innerHTML = '<img alt="" src="' + esc(u) + '">';
+    lb.addEventListener("click", function () { lb.remove(); }); D.body.appendChild(lb);
+  }
+  $("#scrim").addEventListener("click", closeDrawer);
+  D.addEventListener("keydown", function (e) { if (e.key === "Escape") { var lb = $(".lightbox"); if (lb) lb.remove(); else closeDrawer(); } });
+  $("#q").addEventListener("input", function () { filt.q = this.value; render(); });
+  $("#fcat").addEventListener("change", function () { filt.cat = this.value; render(); });
+  $("#refresh").addEventListener("click", function () { load().then(function () { toast("Obnoveno"); }); });
+
+  function startApp() {
+    $("#login").hidden = true; $("#app").hidden = false;
+    load();
+    if (VEStore.mode === "live") setInterval(function () { if (!openId) load(true); }, 30000);
+    else window.addEventListener("storage", function (e) { if (e.key === "ve_requests_v1") load(true); });
+  }
+
+  if (VEStore.mode === "live") {
+    $("#mode").textContent = "Live"; $("#mode").classList.add("live"); $("#logout").hidden = false;
+    $("#logout").addEventListener("click", function () { VEStore.signOut().then(function () { location.reload(); }); });
+    VEStore.session().then(function (s) {
+      if (s) startApp(); else { $("#login").hidden = false; $("#l-email").focus(); }
+    }).catch(function () { $("#login").hidden = false; });
+    $("#login-form").addEventListener("submit", function (e) {
+      e.preventDefault(); $("#l-err").textContent = "";
+      var em = $("#l-email").value.trim(), pw = $("#l-pass").value;
+      if (!em || !pw) { $("#l-err").textContent = "Zadejte e-mail a heslo."; return; }
+      $("#l-btn").disabled = true;
+      VEStore.signIn(em, pw).then(startApp).catch(function () { $("#l-err").textContent = "Špatný e-mail nebo heslo."; }).then(function () { $("#l-btn").disabled = false; });
+    });
+  } else {
+    VEStore.seedDemo();
+    $("#demo-bar").hidden = false;
+    startApp();
+  }
+})();
+</script>
+</body>
+</html>
