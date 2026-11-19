@@ -1,11 +1,16 @@
-// Výkup Express — сповіщення в Telegram про нову заявку.
+// Výkup Express — сповіщення про нову заявку у WhatsApp (CallMeBot) і/або Telegram.
 // Викликається Database Webhook-ом Supabase на INSERT у таблицю requests.
-// Секрети (Edge Functions → Secrets): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (можна кілька через кому), ADMIN_URL
+// Секрети (Edge Functions → Secrets):
+//   WhatsApp: WHATSAPP_PHONE (+420…), CALLMEBOT_APIKEY (ключ від CallMeBot)
+//   Telegram (необов'язково): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (можна кілька через кому)
+//   ADMIN_URL — адреса адмінки
 // SUPABASE_URL і SUPABASE_SERVICE_ROLE_KEY Supabase підставляє сам.
 // Захист: функція бере заявку з бази за її id, тому підробленим запитом нічого не надіслати.
 
 const BOT = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
 const CHATS = (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const WA_PHONE = Deno.env.get("WHATSAPP_PHONE") ?? "";
+const WA_KEY = Deno.env.get("CALLMEBOT_APIKEY") ?? "";
 const ADMIN = Deno.env.get("ADMIN_URL") ?? "";
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -16,10 +21,57 @@ const CAT: Record<string, string> = {
 };
 const CP: Record<string, string> = { call: "zavolat", whatsapp: "WhatsApp", telegram: "Telegram" };
 const LANG: Record<string, string> = { cs: "🇨🇿", de: "🇩🇪", ru: "RU" };
+const PT: Record<string, string> = { byt: "Byt", dum: "Rodinný dům", pozemek: "Pozemek", chata: "Chata/chalupa", komercni: "Komerční", podil: "Podíl" };
+const OWN: Record<string, string> = { os: "osobní", dr: "družstevní", sp: "spoluvlastnictví" };
+const CON: Record<string, string> = { new: "novostavba", good: "dobrý", reno: "před rekonstrukcí", demo: "ke zbourání" };
+const BUR: Record<string, string> = { mort: "hypotéka", exe: "exekuce", ease: "věcné břemeno", none: "bez zatížení" };
+const OCC: Record<string, string> = { free: "volná", owner: "bydlí vlastník", rent: "pronajato" };
+const WHEN: Record<string, string> = { asap: "co nejdřív", "3m": "do 3 měsíců", info: "zjišťuje cenu" };
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
+const plain = (s: unknown) => String(s ?? "").replace(/[*_~`]/g, "");
+
+// deno-lint-ignore no-explicit-any
+function build(r: any, html: boolean) {
+  const e = html ? esc : plain;
+  const b = (s: string) => (html ? `<b>${s}</b>` : `*${s}*`);
+  const d = r.details ?? {};
+  const lines: string[] = [
+    `${b("Nová poptávka")} · ${CAT[r.category] ?? e(r.category)} ${LANG[r.lang] ?? ""}`,
+    "",
+    `👤 ${b(e(r.name))}`,
+    `📞 ${html ? `<code>${e(r.phone)}</code>` : e(r.phone)} · ozvat se: ${e(CP[r.contact_pref] ?? r.contact_pref)}`,
+  ];
+  if (r.city) lines.push(`📍 ${e(r.city)}`);
+  if (r.category === "nemovitosti" && d.type) {
+    lines.push(
+      "",
+      `🏠 ${b(e(PT[d.type] ?? d.type))}${d.layout ? " " + e(d.layout) : ""}${d.area_m2 ? ` · ${e(d.area_m2)} m²` : ""}${d.land_m2 ? ` · pozemek ${e(d.land_m2)} m²` : ""}`,
+      `Vlastnictví: ${e(OWN[d.ownership] ?? "—")} · stav: ${e(CON[d.condition] ?? "—")}`,
+      `Zatížení: ${e((d.burdens ?? []).map((x: string) => BUR[x] ?? x).join(", ") || "neuvedeno")}${d.occupancy ? " · " + e(OCC[d.occupancy] ?? d.occupancy) : ""}`,
+      `Prodej: ${e(WHEN[d.timeline] ?? "—")}${d.price_idea ? ` · představa ${Number(d.price_idea).toLocaleString("cs-CZ")} Kč` : ""}`,
+    );
+    if (d.email) lines.push(`✉️ ${e(d.email)}`);
+  }
+  if (r.description) lines.push("", e(r.description));
+  const n = Array.isArray(r.photos) ? r.photos.length : 0;
+  if (n && !html) lines.push("", `📷 Fotky: ${n} (v administraci)`);
+  const wa = String(r.phone ?? "").replace(/\D/g, "");
+  lines.push("");
+  if (html) lines.push(`<a href="https://wa.me/${wa}">Napsat na WhatsApp</a>` + (ADMIN ? ` · <a href="${esc(ADMIN)}">Otevřít administraci</a>` : ""));
+  else lines.push(`Odpovědět: https://wa.me/${wa}` + (ADMIN ? `\nAdministrace: ${ADMIN}` : ""));
+  return lines.join("\n");
+}
+
+async function whatsapp(text: string) {
+  if (!WA_PHONE || !WA_KEY) return;
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(WA_PHONE)}&apikey=${encodeURIComponent(WA_KEY)}&text=${encodeURIComponent(text)}`;
+  const r = await fetch(url);
+  if (!r.ok) console.error("whatsapp", r.status, (await r.text()).slice(0, 300));
+}
 
 async function tg(method: string, body: Record<string, unknown>) {
+  if (!BOT) return;
   for (const chat_id of CHATS) {
     const r = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, chat_id }),
@@ -49,41 +101,18 @@ Deno.serve(async (req) => {
   const r = rows[0];
   if (!r || Date.now() - new Date(r.created_at).getTime() > 10 * 60 * 1000) return new Response("ignored");
 
-  const wa = String(r.phone ?? "").replace(/\D/g, "");
-  const d = r.details ?? {};
-  const PT: Record<string, string> = { byt: "Byt", dum: "Rodinný dům", pozemek: "Pozemek", chata: "Chata/chalupa", komercni: "Komerční", podil: "Podíl" };
-  const OWN: Record<string, string> = { os: "osobní", dr: "družstevní", sp: "spoluvlastnictví" };
-  const CON: Record<string, string> = { new: "novostavba", good: "dobrý", reno: "před rekonstrukcí", demo: "ke zbourání" };
-  const BUR: Record<string, string> = { mort: "hypotéka", exe: "exekuce", ease: "věcné břemeno", none: "bez zatížení" };
-  const OCC: Record<string, string> = { free: "volná", owner: "bydlí vlastník", rent: "pronajato" };
-  const WHEN: Record<string, string> = { asap: "co nejdřív", "3m": "do 3 měsíců", info: "zjišťuje cenu" };
-  const prop = r.category === "nemovitosti" && d.type ? [
-    "",
-    `🏠 <b>${esc(PT[d.type] ?? d.type)}</b>${d.layout ? " " + esc(d.layout) : ""}${d.area_m2 ? ` · ${esc(d.area_m2)} m²` : ""}${d.land_m2 ? ` · pozemek ${esc(d.land_m2)} m²` : ""}`,
-    `Vlastnictví: ${esc(OWN[d.ownership] ?? "—")} · stav: ${esc(CON[d.condition] ?? "—")}`,
-    `Zatížení: ${esc((d.burdens ?? []).map((b: string) => BUR[b] ?? b).join(", ") || "neuvedeno")} · ${esc(OCC[d.occupancy] ?? "")}`,
-    `Prodej: ${esc(WHEN[d.timeline] ?? "—")}${d.price_idea ? ` · představa ${Number(d.price_idea).toLocaleString("cs-CZ")} Kč` : ""}`,
-    d.email ? `✉️ ${esc(d.email)}` : "",
-  ].filter(Boolean).join("\n") : "";
-  const text = [
-    `<b>Nová poptávka</b> · ${esc(CAT[r.category] ?? r.category)} ${LANG[r.lang] ?? ""}`,
-    "",
-    `👤 <b>${esc(r.name)}</b>`,
-    `📞 <code>${esc(r.phone)}</code> · ozvat se: ${esc(CP[r.contact_pref] ?? r.contact_pref)}`,
-    r.city ? `📍 ${esc(r.city)}` : "",
-    prop,
-    r.description ? `\n${esc(r.description)}` : "",
-    "",
-    `<a href="https://wa.me/${wa}">Napsat na WhatsApp</a>` + (ADMIN ? ` · <a href="${esc(ADMIN)}">Otevřít administraci</a>` : ""),
-  ].filter((l) => l !== "").join("\n");
-
-  await tg("sendMessage", { text, parse_mode: "HTML", disable_web_page_preview: true });
-
-  const photos: string[] = Array.isArray(r.photos) ? r.photos : [];
-  if (photos.length) {
-    const urls = (await Promise.all(photos.map(signed))).filter(Boolean) as string[];
-    if (urls.length === 1) await tg("sendPhoto", { photo: urls[0] });
-    else if (urls.length > 1) await tg("sendMediaGroup", { media: urls.map((u) => ({ type: "photo", media: u })) });
-  }
+  await Promise.all([
+    whatsapp(build(r, false)).catch((e) => console.error("whatsapp", e)),
+    (async () => {
+      if (!BOT || !CHATS.length) return;
+      await tg("sendMessage", { text: build(r, true), parse_mode: "HTML", disable_web_page_preview: true });
+      const photos: string[] = Array.isArray(r.photos) ? r.photos : [];
+      if (photos.length) {
+        const urls = (await Promise.all(photos.map(signed))).filter(Boolean) as string[];
+        if (urls.length === 1) await tg("sendPhoto", { photo: urls[0] });
+        else if (urls.length > 1) await tg("sendMediaGroup", { media: urls.map((u) => ({ type: "photo", media: u })) });
+      }
+    })().catch((e) => console.error("telegram", e)),
+  ]);
   return new Response("ok");
 });
