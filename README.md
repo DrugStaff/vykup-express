@@ -55,16 +55,15 @@ supabase/           SQL для бази + функція для Telegram
 
 ## 4. Сповіщення в Telegram
 
+Функція `telegram-notify`, вебхук на нові заявки й `ADMIN_URL` уже налаштовані. Лишається тільки бот:
+
 1. У Telegram напиши **@BotFather** → `/newbot` → назва, напр. *Výkup Express* → отримаєш **токен бота**.
-2. Напиши своєму боту будь-що. Потім відкрий у браузері `https://api.telegram.org/bot<ТОКЕН>/getUpdates` і знайди `"chat":{"id": ...}` — це **chat id**. Для групи: додай бота в групу, напиши в ній повідомлення і так само глянь id (він з мінусом).
-3. Supabase → **Edge Functions → Deploy a new function → Via Editor** → назва `telegram-notify` → встав код з `supabase/functions/telegram-notify/index.ts` → Deploy. У налаштуваннях функції вимкни **Verify JWT**.
-4. **Edge Functions → Secrets** → додай:
-   - `TELEGRAM_BOT_TOKEN` = токен
-   - `TELEGRAM_CHAT_ID` = chat id
-   - `WEBHOOK_SECRET` = будь-яке довге випадкове слово
-   - `ADMIN_URL` = адреса адмінки, напр. `https://vykupexpress.cz/admin.html`
-5. **Database → Webhooks → Create a new hook**: таблиця `requests`, подія **Insert**, тип *Supabase Edge Functions*, функція `telegram-notify`, метод POST. У **HTTP Headers** додай `x-webhook-secret` = те саме слово, що в секреті. Зберегти.
-6. Надішли тестову заявку з сайту — в Telegram прийде повідомлення з контактом, описом, фото й кнопкою WhatsApp.
+2. Відкрий свого нового бота й натисни **Start** (інакше бот не зможе тобі писати).
+3. Напиши **@userinfobot** — він відповість твоїм **Id** (число). Якщо сповіщення мають приходити й Міхалу, хай він теж натисне Start у боті й візьме свій Id у @userinfobot.
+4. Supabase → **Edge Functions → Secrets**: `TELEGRAM_BOT_TOKEN` = токен, `TELEGRAM_CHAT_ID` = Id (кілька через кому, напр. `123456,987654`) → **Bulk save**.
+5. Надішли тестову заявку з сайту — прийде повідомлення з контактом, описом, фото й кнопкою WhatsApp.
+
+Захист: функція бере заявку з бази за її id, тож підробленим запитом нічого в Telegram не надіслати.
 
 ## 5. Домен
 

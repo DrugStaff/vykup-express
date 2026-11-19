@@ -1,11 +1,11 @@
 // Výkup Express — сповіщення в Telegram про нову заявку.
 // Викликається Database Webhook-ом Supabase на INSERT у таблицю requests.
-// Секрети (Edge Functions → Secrets): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, WEBHOOK_SECRET, ADMIN_URL
+// Секрети (Edge Functions → Secrets): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (можна кілька через кому), ADMIN_URL
 // SUPABASE_URL і SUPABASE_SERVICE_ROLE_KEY Supabase підставляє сам.
+// Захист: функція бере заявку з бази за її id, тому підробленим запитом нічого не надіслати.
 
 const BOT = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
-const CHAT = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
-const SECRET = Deno.env.get("WEBHOOK_SECRET") ?? "";
+const CHATS = (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const ADMIN = Deno.env.get("ADMIN_URL") ?? "";
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -19,11 +19,13 @@ const LANG: Record<string, string> = { cs: "🇨🇿", de: "🇩🇪", ru: "RU" 
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));
 
-async function tg(method: string, body: unknown) {
-  const r = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!r.ok) console.error(method, r.status, await r.text());
+async function tg(method: string, body: Record<string, unknown>) {
+  for (const chat_id of CHATS) {
+    const r = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, chat_id }),
+    });
+    if (!r.ok) console.error(method, chat_id, r.status, await r.text());
+  }
 }
 
 async function signed(path: string): Promise<string | null> {
@@ -38,10 +40,14 @@ async function signed(path: string): Promise<string | null> {
 }
 
 Deno.serve(async (req) => {
-  if (SECRET && req.headers.get("x-webhook-secret") !== SECRET) return new Response("forbidden", { status: 403 });
   const payload = await req.json().catch(() => null);
-  const r = payload?.record;
-  if (!r || payload.type !== "INSERT") return new Response("ignored");
+  const id = payload?.record?.id;
+  if (payload?.type !== "INSERT" || !/^[0-9a-f-]{36}$/i.test(String(id ?? ""))) return new Response("ignored");
+  // načíst skutečnou poptávku z databáze (ne z těla požadavku)
+  const q = await fetch(`${SB_URL}/rest/v1/requests?id=eq.${id}&select=*`, { headers: { apikey: SB_KEY, authorization: `Bearer ${SB_KEY}` } });
+  const rows = q.ok ? await q.json() : [];
+  const r = rows[0];
+  if (!r || Date.now() - new Date(r.created_at).getTime() > 10 * 60 * 1000) return new Response("ignored");
 
   const wa = String(r.phone ?? "").replace(/\D/g, "");
   const d = r.details ?? {};
@@ -71,13 +77,13 @@ Deno.serve(async (req) => {
     `<a href="https://wa.me/${wa}">Napsat na WhatsApp</a>` + (ADMIN ? ` · <a href="${esc(ADMIN)}">Otevřít administraci</a>` : ""),
   ].filter((l) => l !== "").join("\n");
 
-  await tg("sendMessage", { chat_id: CHAT, text, parse_mode: "HTML", disable_web_page_preview: true });
+  await tg("sendMessage", { text, parse_mode: "HTML", disable_web_page_preview: true });
 
   const photos: string[] = Array.isArray(r.photos) ? r.photos : [];
   if (photos.length) {
     const urls = (await Promise.all(photos.map(signed))).filter(Boolean) as string[];
-    if (urls.length === 1) await tg("sendPhoto", { chat_id: CHAT, photo: urls[0] });
-    else if (urls.length > 1) await tg("sendMediaGroup", { chat_id: CHAT, media: urls.map((u) => ({ type: "photo", media: u })) });
+    if (urls.length === 1) await tg("sendPhoto", { photo: urls[0] });
+    else if (urls.length > 1) await tg("sendMediaGroup", { media: urls.map((u) => ({ type: "photo", media: u })) });
   }
   return new Response("ok");
 });
