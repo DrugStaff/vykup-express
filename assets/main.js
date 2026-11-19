@@ -51,6 +51,11 @@
     $$("[data-tg]").forEach(function (a) { a.href = "https://t.me/" + String(C.telegram || "").replace(/^@/, ""); a.target = "_blank"; a.rel = "noopener"; });
     $$("[data-tel]").forEach(function (a) { a.href = "tel:" + String(C.phone || "").replace(/[^\d+]/g, ""); });
     $$("[data-mail]").forEach(function (a) { a.href = "mailto:" + (C.email || ""); });
+    // hide channels that are not set up yet (whole contact row, or just the button)
+    [["telegram", "[data-tg]"], ["email", "[data-mail]"]].forEach(function (p) {
+      if (C[p[0]]) return;
+      $$(p[1]).forEach(function (a) { var row = a.closest(".cinfo > div"); (row || a).hidden = true; var sep = a.nextSibling; if (!row && sep && sep.nodeType === 3) sep.textContent = sep.textContent.replace("·", ""); });
+    });
   }
   $$("[data-copy]").forEach(function (b) {
     b.addEventListener("click", function () {
